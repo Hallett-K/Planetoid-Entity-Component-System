@@ -183,6 +183,12 @@ namespace PECS
             return pool->Get(entity);
         }
 
+        template <typename... Ts>
+        std::tuple<Ts&...> GetComponents(EntityID entity)
+        {
+            return std::tuple<Ts&...>(GetComponent<Ts>(entity)...);
+        }
+
         template <typename T>
         bool RemoveComponent(EntityID entity)
         {
@@ -205,6 +211,12 @@ namespace PECS
                 return pool->Has(entity);
             }
             return false;
+        }
+
+        template <typename... Ts>
+        bool HasComponents(EntityID entity) const 
+        {
+            return (HasComponent<Ts>(entity) && ...);
         }
 
         template<typename T>
