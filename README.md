@@ -12,13 +12,13 @@ A fast, lightweight C++17 Entity Component System made as a hobby project.
 - Sparse Set based Entity Component System
 - Fast Create / Delete Entity with Entity ID reusing
 - O(1) Time Complexity component querying, adding and removing
+- Multi-Component query and iteration
 - Contiguous Component storage for fast iteration 
 
 ## Planned Features
 
 In no particular order:
 - Entity Versioning
-- Multi-Component querying
 - System Scheduling
 - More robust component iteration utilities
 - Debugging tools
@@ -49,8 +49,8 @@ struct MyComponent
     float Value = 0.0f;
 };
 
-PECSInstance ECS(1000); // Create an ECS Instance, Max Entities = 1000
-EntityID Entity = ECS.CreateEntity(); // Returns an ID
+PECS::ECSInstance ECS(1000); // Create an ECS Instance, Max Entities = 1000
+PECS::EntityID Entity = ECS.CreateEntity(); // Returns an ID
 
 // AddComponent<> takes type as template, Entity ID to add to and the constructor parameters
 // Returns a reference to the component so can be retrieved as auto& or explicit typing
@@ -72,6 +72,13 @@ for (auto entry : ECS.Iterate<MyComponent>())
 {
     EntityID entity = entry.entity;
     MyComponent& component = entry.data;
+    ...
+}
+
+// Want to iterate through entities with a set of components? Use a View!
+// Imagine CompA, CompB CompC as components for this example...
+for (auto& [entity, myCompA, myCompB, myCompC] : ECS.View<CompA, CompB, CompC>())
+{
     ...
 }
 

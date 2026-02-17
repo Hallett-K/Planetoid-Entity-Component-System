@@ -80,14 +80,7 @@ namespace PECS
             m_SparseSet[entity] = m_MaxEntities - 1;
 
             return true;
-        }
-
-        auto begin() { return m_DenseSet.begin(); }
-        auto end()   { return m_DenseSet.end(); }
-
-        auto begin() const { return m_DenseSet.begin(); }
-        auto end()   const { return m_DenseSet.end(); }
-
+        }        
         
     private:
         size_t m_MaxEntities;
@@ -100,6 +93,15 @@ namespace PECS
         };
 
         std::vector<DenseSetEntry> m_DenseSet;
+
+    public:
+        typename std::vector<DenseSetEntry>::iterator begin() { return m_DenseSet.begin(); }
+        typename std::vector<DenseSetEntry>::iterator end()   { return m_DenseSet.end(); }
+
+        typename std::vector<DenseSetEntry>::const_iterator begin() const { return m_DenseSet.begin(); }
+        typename std::vector<DenseSetEntry>::const_iterator end() const { return m_DenseSet.end(); }
+
+        size_t size() const { return m_DenseSet.size(); }
     };
 
     struct ISparseSetWrapper
@@ -121,6 +123,9 @@ namespace PECS
         virtual bool HasEntity(EntityID entity) const override { return set.Has(entity); }
         virtual bool RemoveEntity(EntityID entity) override { return set.Remove(entity); }
     };
+
+    template<typename... Ts>
+    class View;
 
     class ECSInstance
     {
@@ -194,7 +199,7 @@ namespace PECS
         {
             PECS_ASSERT(entity < m_MaxEntities && "RemoveComponent called with invalid Entity ID");
 
-            if (auto* pool = TryGetPool<T>())
+            if (SparseSet<T>* pool = TryGetPool<T>())
             {
                 return pool->Remove(entity);
             }
@@ -206,7 +211,7 @@ namespace PECS
         {
             PECS_ASSERT(entity < m_MaxEntities && "HasComponent called with invalid Entity ID");
 
-            if (auto* pool = TryGetPool<T>())
+            if (const SparseSet<T>* pool = TryGetPool<T>())
             {
                 return pool->Has(entity);
             }
@@ -225,6 +230,11 @@ namespace PECS
             return GetOrCreatePool<T>();
         }
 
+        template <typename... Ts>
+        PECS::View<Ts...> View()
+        {
+            return PECS::View<Ts...>(*this);
+        }
 
     private:
         unsigned int m_MaxEntities;
@@ -261,6 +271,80 @@ namespace PECS
             return nullptr;
         }
 
+        template <typename T>
+        const SparseSet<T>* TryGetPool() const
+        {
+            std::type_index key(typeid(T));
+            auto it = m_ComponentPools.find(key);
+            if (it != m_ComponentPools.end())
+            {
+                return &static_cast<SparseSetWrapper<T>*>(it->second)->set;
+            }
+
+            return nullptr;
+        }
+    };
+
+    template <typename... Ts>
+    class View
+    {
+        using First = std::tuple_element_t<0, std::tuple<Ts...>>;
+    public:
+        View(ECSInstance& ecs)
+            : m_ECS(ecs) 
+        {
+            m_FirstPool = &m_ECS.Iterate<First>();
+        }
+
+        struct Iterator
+        {
+            ECSInstance& ECS;
+            SparseSet<First>* FirstPool;
+            size_t index = 0;
+
+            void Advance()
+            {
+                while (index < FirstPool->size())
+                {
+                    EntityID e = (FirstPool->begin() + index)->entity;
+                    if ((ECS.HasComponent<Ts>(e) && ...))
+                    {
+                        return;
+                    }
+                    index++;
+                }
+            }
+
+            bool operator!=(const Iterator& other) { return index != other.index; }
+            Iterator& operator++()
+            {
+                index++;
+                Advance();
+                return *this;
+            }
+
+            std::tuple<EntityID, Ts&...> operator*()
+            {
+                EntityID e = (FirstPool->begin() + index)->entity;
+                return { e, ECS.GetComponent<Ts>(e)... };
+            }
+        };
+
+        Iterator begin()
+        {
+            Iterator it{ m_ECS, m_FirstPool, 0 };
+            it.Advance();
+            return it;
+        }
+
+        Iterator end()
+        {
+            return Iterator{ m_ECS, m_FirstPool, m_FirstPool->size() };
+        }
+
+    private:
+        ECSInstance& m_ECS;
+        SparseSet<First>* m_FirstPool;
     };
 }
 
